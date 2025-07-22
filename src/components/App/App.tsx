@@ -74,9 +74,8 @@ const fetchFilteredSIMs = async (
 function App() {
   const queryClient = useQueryClient();
 
-  const [selectedStatus, setSelectedStatus] = useState<number>(1); // default: Activated
-
-  const [authStatus, setAuthStatus] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState<number>(1);
+  const [authStatus, setAuthStatus] = useState("Auth error");
   const [simStatus, setSimStatus] = useState("");
   const [sims, setSims] = useState<Sim[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<ColumnKey[]>([
