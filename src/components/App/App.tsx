@@ -112,6 +112,7 @@ function App() {
       setSimStatus(`SIMs fetch error: ${err.message}`);
     },
   });
+  const { mutate, isPending } = simMutation;
 
   const downloadCSV = () => {
     if (!sims.length || selectedColumns.length === 0) return;
@@ -155,20 +156,17 @@ function App() {
       </fieldset>
 
       <button
-        onClick={() => simMutation.mutate()}
-        disabled={!queryClient.getQueryData(["authToken"])}
+        onClick={() => mutate()}
+        disabled={!queryClient.getQueryData(["authToken"]) || isPending}
       >
-        Fetch SIMs (status {selectedStatus})
+        {isPending ? "Fetching..." : "Fetch SIMs"} (status {selectedStatus})
       </button>
       <p>{simStatus}</p>
 
       <fieldset style={{ display: "flex", marginTop: "10px" }}>
         <legend>Select columns to display and download:</legend>
         {AVAILABLE_COLUMNS.map((col) => (
-          <label
-            key={col}
-            // style={{ marginBottom: "4px" }}
-          >
+          <label key={col}>
             <input
               type="checkbox"
               checked={selectedColumns.includes(col)}
