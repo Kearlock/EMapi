@@ -80,6 +80,7 @@ function App() {
   const [simStatus, setSimStatus] = useState("");
   const [sims, setSims] = useState<Sim[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<ColumnKey[]>([
+    "id",
     "iccid",
   ]);
 
@@ -133,18 +134,15 @@ function App() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 10 }}>
       <h1>SIM Management</h1>
       <button onClick={() => authMutation.mutate()}>Authenticate</button>
       <p>Status: {authStatus}</p>
 
-      <fieldset style={{ marginTop: "20px" }}>
+      <fieldset style={{ marginTop: "10px" }}>
         <legend>Select SIM status to fetch:</legend>
         {Object.entries(SIM_STATUS_LABELS).map(([value, label]) => (
-          <label
-            key={value}
-            // style={{ display: "block", marginBottom: "4px" }}
-          >
+          <label key={value}>
             <input
               type="radio"
               value={value}
@@ -164,10 +162,13 @@ function App() {
       </button>
       <p>{simStatus}</p>
 
-      <fieldset style={{ display: "flex", marginTop: "20px" }}>
+      <fieldset style={{ display: "flex", marginTop: "10px" }}>
         <legend>Select columns to display and download:</legend>
         {AVAILABLE_COLUMNS.map((col) => (
-          <label key={col} style={{ marginBottom: "4px" }}>
+          <label
+            key={col}
+            // style={{ marginBottom: "4px" }}
+          >
             <input
               type="checkbox"
               checked={selectedColumns.includes(col)}
@@ -183,13 +184,11 @@ function App() {
           </label>
         ))}
       </fieldset>
-      <button onClick={downloadCSV} style={{ marginTop: "1rem" }}>
-        Download CSV
-      </button>
+      <button onClick={downloadCSV}>Download CSV</button>
       {simStatus && sims.length > 0 && selectedColumns.length > 0 && (
         <>
-          <h3 style={{ marginTop: "1rem" }}>Preview (first 5 rows)</h3>
-          <table border={1} cellPadding={1} style={{ marginTop: "0.5rem" }}>
+          <h3 style={{ marginTop: "10px" }}>Preview (first 5 rows)</h3>
+          <table border={1} cellPadding={1} style={{ marginTop: "10px" }}>
             <thead>
               <tr>
                 {selectedColumns.map((col) => (
