@@ -4,7 +4,7 @@ import axios from "axios";
 
 const AVAILABLE_COLUMNS: ColumnKey[] = ["id", "iccid", "iccid_with_luhn"];
 const API_BASE_URL = "https://cdn.emnify.net";
-const APP_KEY = import.meta.env.VITE_APP_KEY;
+// const APP_KEY = import.meta.env.VITE_APP_KEY;
 const SIM_STATUS_LABELS: Record<number, string> = {
   0: "Issued",
   1: "Activated",
@@ -27,11 +27,11 @@ interface Sim {
   // add other fields you need
 }
 
-const fetchToken = async (): Promise<string> => {
+const fetchToken = async (appKey: string): Promise<string> => {
   const response = await axios.post<AuthResponse>(
     `${API_BASE_URL}/api/v1/authenticate`,
     {
-      application_token: APP_KEY,
+      application_token: appKey,
     }
   );
   return response.data.auth_token;
@@ -73,7 +73,7 @@ const fetchFilteredSIMs = async (
 
 function App() {
   const queryClient = useQueryClient();
-
+  const [appKey, setAppKey] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<number>(1);
   const [authStatus, setAuthStatus] = useState("Auth error");
   const [simStatus, setSimStatus] = useState("");
@@ -136,7 +136,19 @@ function App() {
   return (
     <div style={{ padding: 10 }}>
       <h1>SIM Management</h1>
-      <button onClick={() => authMutation.mutate()}>Authenticate</button>
+      <div>
+        <label>
+          App Key:{" "}
+          <input
+            type="text"
+            value={appKey}
+            onChange={(e) => setAppKey(e.target.value)}
+            placeholder="Enter your app key"
+          />
+        </label>
+      </div>
+
+      <button onClick={() => authMutation.mutate(appKey)}>Authenticate</button>
       <p>Status: {authStatus}</p>
 
       <fieldset style={{ marginTop: "10px" }}>
