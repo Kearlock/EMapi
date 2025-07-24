@@ -73,11 +73,19 @@ const fetchFilteredSIMs = async (
   return allSIMs;
 };
 
+const checkSimUsage = async (simId: string, token: string) => {
+  const response = await axios.get(`/api/v1/sim/${simId}/stats`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
 function App() {
   const queryClient = useQueryClient();
-  const [uploadedICCIDs, setUploadedICCIDs] = useState<string[]>([]);
-
   const [appKey, setAppKey] = useState("");
+  const [noUsageFilteredSims, setNoUsageFilteredSims] = useState<Sim[]>([]);
+  const [isFilteringUsage, setIsFilteringUsage] = useState(false);
+  const [uploadedICCIDs, setUploadedICCIDs] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<number>(1);
   const [authStatus, setAuthStatus] = useState("Auth error");
   const [simStatus, setSimStatus] = useState("");
@@ -159,6 +167,42 @@ function App() {
   });
   const { mutate, isPending } = simMutation;
 
+  const filterSimsByNoUsage = async () => {
+    setIsFilteringUsage(true);
+
+    const token = queryClient.getQueryData<string>(["authToken"]);
+    if (!token) {
+      console.error("Not authenticated");
+      setIsFilteringUsage(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      filteredSims.map(async (sim) => {
+        try {
+          const data = await checkSimUsage(sim.id.toString(), token);
+          const hasUsage =
+            !!data?.last_month?.data || !!data?.current_month?.data;
+
+          return { sim, hasUsage };
+        } catch (err) {
+          console.warn(`Failed to check SIM ${sim.id}`, err);
+          return { sim, hasUsage: true }; // Treat failures as "has usage" to avoid filtering too much
+        }
+      })
+    );
+
+    const simsWithoutUsage = results
+      .filter(
+        (r): r is PromiseFulfilledResult<{ sim: Sim; hasUsage: boolean }> =>
+          r.status === "fulfilled" && !r.value.hasUsage
+      )
+      .map((r) => r.value.sim);
+
+    setNoUsageFilteredSims(simsWithoutUsage);
+    setIsFilteringUsage(false);
+  };
+
   const downloadCSV = (data: Sim[], filename = "sims_export.csv") => {
     if (!data.length || selectedColumns.length === 0) return;
 
@@ -237,24 +281,41 @@ function App() {
               onChange={handleFileUpload}
             />
           </label>
-          <p>Imported ICCIDs: {uploadedICCIDs.length}</p>
+          <p>
+            Imported ICCIDs: {uploadedICCIDs.length}. Unused SIMs: {""}
+            {noUsageFilteredSims.length}.
+          </p>
         </div>
-        <button
-          onClick={() => {
-            const iccidSet = new Set(uploadedICCIDs.map((id) => id.trim()));
-            const filtered = sims.filter(
-              (sim) =>
-                !iccidSet.has(sim.iccid ?? "") &&
-                !iccidSet.has(sim.iccid_with_luhn ?? "")
-            );
-            setFilteredSims(filtered);
-          }}
-          disabled={sims.length === 0 || uploadedICCIDs.length === 0}
-        >
-          Exclude Uploaded
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={() => {
+              const iccidSet = new Set(uploadedICCIDs.map((id) => id.trim()));
+              const filtered = sims.filter(
+                (sim) =>
+                  !iccidSet.has(sim.iccid ?? "") &&
+                  !iccidSet.has(sim.iccid_with_luhn ?? "")
+              );
+              setFilteredSims(filtered);
+            }}
+            disabled={sims.length === 0 || uploadedICCIDs.length === 0}
+          >
+            Exclude Uploaded
+          </button>
+
+          <button
+            onClick={filterSimsByNoUsage}
+            disabled={filteredSims.length === 0 || isFilteringUsage}
+          >
+            {isFilteringUsage ? "Filtering..." : "Exclude used SIMs"}
+          </button>
+        </div>
       </fieldset>
-      <p>After exclusion: {filteredSims.length}</p>
+      <p>
+        After exclusion:{" "}
+        {noUsageFilteredSims.length === 0
+          ? filteredSims.length
+          : noUsageFilteredSims.length}
+      </p>
       <fieldset style={{ display: "flex", marginTop: "10px" }}>
         <legend>Select columns to display and download:</legend>
         {AVAILABLE_COLUMNS.map((col) => (
@@ -328,6 +389,43 @@ function App() {
                   </thead>
                   <tbody>
                     {filteredSims.slice(0, 5).map((sim) => (
+                      <tr key={sim.id}>
+                        {selectedColumns.map((col) => (
+                          <td key={col}>{sim[col as keyof Sim] ?? "-"}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+        </div>
+        <div>
+          <button
+            onClick={() =>
+              downloadCSV(noUsageFilteredSims, "unused-filtered.csv")
+            }
+          >
+            Unused-filtered CSV
+          </button>
+
+          {simStatus &&
+            noUsageFilteredSims.length > 0 &&
+            selectedColumns.length > 0 && (
+              <>
+                <h3 style={{ marginTop: "10px" }}>
+                  Unused-Filter Preview (first 5 rows)
+                </h3>
+                <table border={1} cellPadding={1} style={{ marginTop: "10px" }}>
+                  <thead>
+                    <tr>
+                      {selectedColumns.map((col) => (
+                        <th key={col}>{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {noUsageFilteredSims.slice(0, 5).map((sim) => (
                       <tr key={sim.id}>
                         {selectedColumns.map((col) => (
                           <td key={col}>{sim[col as keyof Sim] ?? "-"}</td>
