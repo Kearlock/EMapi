@@ -272,6 +272,7 @@ function App() {
 
   const suspendAllNoUsageSims = async () => {
     setIsSuspending(true);
+
     const token = queryClient.getQueryData<string>(["authToken"]);
     if (!token) {
       console.error("Not authenticated");
@@ -279,22 +280,27 @@ function App() {
       return;
     }
 
-    const results = await Promise.allSettled(
-      noUsageFilteredSims.map(async (sim) => {
-        try {
-          await suspendSim(sim.id.toString(), token);
-          return { sim, success: true };
-        } catch (err) {
-          console.error(`Failed to suspend SIM ${sim.id}`, err);
-          return { sim, success: false };
-        }
-      })
-    );
+    const CHUNK_SIZE = 10; // process 10 SIMs at a time
+    let successCount = 0;
 
-    const successCount = results.filter(
-      (r): r is PromiseFulfilledResult<{ sim: Sim; success: boolean }> =>
-        r.status === "fulfilled" && r.value.success
-    ).length;
+    for (let i = 0; i < noUsageFilteredSims.length; i += CHUNK_SIZE) {
+      const chunk = noUsageFilteredSims.slice(i, i + CHUNK_SIZE);
+
+      await Promise.allSettled(
+        chunk.map(async (sim) => {
+          try {
+            await suspendSim(sim.id.toString(), token);
+            successCount++;
+          } catch (err) {
+            console.error(`Failed to suspend SIM ${sim.id}`, err);
+            // failures are just logged and skipped
+          }
+        })
+      );
+
+      // ✅ add a 300ms delay between batches to prevent API overload
+      await new Promise((res) => setTimeout(res, 300));
+    }
 
     alert(`${successCount} SIMs were successfully suspended.`);
     setIsSuspending(false);
