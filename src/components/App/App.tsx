@@ -80,17 +80,32 @@ const checkSimUsage = async (simId: string, token: string) => {
   return response.data;
 };
 
+const suspendSim = async (simId: string, token: string) => {
+  const response = await axios.patch(
+    `/api/v1/sim/${simId}`,
+    { status: { id: 2 } },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return response.data;
+};
+
 function App() {
   const queryClient = useQueryClient();
   const [appKey, setAppKey] = useState("");
-  const [noUsageFilteredSims, setNoUsageFilteredSims] = useState<Sim[]>([]);
+  const [authStatus, setAuthStatus] = useState("Auth error");
   const [isFilteringUsage, setIsFilteringUsage] = useState(false);
+  const [isSuspending, setIsSuspending] = useState(false);
   const [uploadedICCIDs, setUploadedICCIDs] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<number>(1);
-  const [authStatus, setAuthStatus] = useState("Auth error");
   const [simStatus, setSimStatus] = useState("");
   const [sims, setSims] = useState<Sim[]>([]);
   const [filteredSims, setFilteredSims] = useState<Sim[]>([]); // filtered result
+  const [noUsageFilteredSims, setNoUsageFilteredSims] = useState<Sim[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<ColumnKey[]>([
     "id",
     "iccid",
@@ -221,6 +236,36 @@ function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const suspendAllNoUsageSims = async () => {
+    setIsSuspending(true);
+    const token = queryClient.getQueryData<string>(["authToken"]);
+    if (!token) {
+      console.error("Not authenticated");
+      setIsSuspending(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      noUsageFilteredSims.map(async (sim) => {
+        try {
+          await suspendSim(sim.id.toString(), token);
+          return { sim, success: true };
+        } catch (err) {
+          console.error(`Failed to suspend SIM ${sim.id}`, err);
+          return { sim, success: false };
+        }
+      })
+    );
+
+    const successCount = results.filter(
+      (r): r is PromiseFulfilledResult<{ sim: Sim; success: boolean }> =>
+        r.status === "fulfilled" && r.value.success
+    ).length;
+
+    alert(`${successCount} SIMs were successfully suspended.`);
+    setIsSuspending(false);
   };
 
   return (
@@ -438,6 +483,12 @@ function App() {
             )}
         </div>
       </div>
+      <button
+        onClick={suspendAllNoUsageSims}
+        disabled={isSuspending || noUsageFilteredSims.length === 0}
+      >
+        {isSuspending ? "Suspending..." : "Suspend unused SIMs"}
+      </button>
     </div>
   );
 }
