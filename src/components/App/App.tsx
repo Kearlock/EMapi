@@ -74,15 +74,18 @@ const fetchFilteredSIMs = async (
 };
 
 const checkSimUsage = async (simId: string, token: string) => {
-  const response = await axios.get(`/api/v1/sim/${simId}/stats`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await axios.get(
+    `${API_BASE_URL}/api/v1/sim/${simId}/stats`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
   return response.data;
 };
 
 const suspendSim = async (simId: string, token: string) => {
   const response = await axios.patch(
-    `/api/v1/sim/${simId}`,
+    `${API_BASE_URL}/api/v1/sim/${simId}`,
     { status: { id: 2 } },
     {
       headers: {
@@ -139,14 +142,40 @@ function App() {
       reader.readAsArrayBuffer(file);
     } else {
       // CSV or TXT: read as text
+      // CSV, TSV, or TXT: read as text
       reader.onload = () => {
         const text = reader.result as string;
+
+        // Split into lines, trim whitespace
         const lines = text
           .split(/[\r\n]+/)
           .map((line) => line.trim())
-          .filter((line) => /^\d{18,20}$/.test(line));
+          .filter(Boolean);
 
-        setUploadedICCIDs(lines);
+        // Detect separator: check if the first line contains tabs or commas
+        const firstLine = lines[0];
+        const separator = firstLine.includes("\t") ? "\t" : ",";
+
+        // Parse header (remove quotes, split by detected separator)
+        const header = firstLine.replace(/"/g, "").split(separator);
+        const iccidIndex = header.findIndex((h) => h.toLowerCase() === "iccid");
+
+        let iccids: string[];
+
+        if (iccidIndex !== -1) {
+          // ✅ Parse as CSV/TSV with header, extract ICCID column
+          iccids = lines
+            .slice(1) // skip header
+            .map((line) => line.replace(/"/g, "").split(separator)[iccidIndex])
+            .filter((iccid) => /^\d{18,20}$/.test(iccid)); // only valid ICCIDs
+        } else {
+          // ✅ Fallback: plain list of ICCIDs (no header)
+          iccids = lines
+            .map((line) => line.replace(/"/g, "").trim())
+            .filter((line) => /^\d{18,20}$/.test(line));
+        }
+
+        setUploadedICCIDs(iccids);
       };
       reader.readAsText(file);
     }
@@ -192,27 +221,30 @@ function App() {
       return;
     }
 
-    const results = await Promise.allSettled(
-      filteredSims.map(async (sim) => {
-        try {
-          const data = await checkSimUsage(sim.id.toString(), token);
-          const hasUsage =
-            !!data?.last_month?.data || !!data?.current_month?.data;
+    const CHUNK_SIZE = 10; // how many SIMs to process in parallel
+    const simsWithoutUsage: Sim[] = [];
 
-          return { sim, hasUsage };
-        } catch (err) {
-          console.warn(`Failed to check SIM ${sim.id}`, err);
-          return { sim, hasUsage: true }; // Treat failures as "has usage" to avoid filtering too much
-        }
-      })
-    );
+    for (let i = 0; i < filteredSims.length; i += CHUNK_SIZE) {
+      const chunk = filteredSims.slice(i, i + CHUNK_SIZE);
 
-    const simsWithoutUsage = results
-      .filter(
-        (r): r is PromiseFulfilledResult<{ sim: Sim; hasUsage: boolean }> =>
-          r.status === "fulfilled" && !r.value.hasUsage
-      )
-      .map((r) => r.value.sim);
+      await Promise.allSettled(
+        chunk.map(async (sim) => {
+          try {
+            const data = await checkSimUsage(sim.id.toString(), token);
+            const hasUsage =
+              !!data?.last_month?.data || !!data?.current_month?.data;
+
+            if (!hasUsage) simsWithoutUsage.push(sim);
+          } catch (err) {
+            console.warn(`Failed to check SIM ${sim.id}`, err);
+            // failures are skipped
+          }
+        })
+      );
+
+      // optional: small delay between batches to avoid server overload
+      await new Promise((res) => setTimeout(res, 200));
+    }
 
     setNoUsageFilteredSims(simsWithoutUsage);
     setIsFilteringUsage(false);
