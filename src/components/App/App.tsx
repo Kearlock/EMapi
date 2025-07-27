@@ -243,7 +243,7 @@ function App() {
       );
 
       // optional: small delay between batches to avoid server overload
-      await new Promise((res) => setTimeout(res, 200));
+      await new Promise((res) => setTimeout(res, 300));
     }
 
     setNoUsageFilteredSims(simsWithoutUsage);
